@@ -4,7 +4,9 @@ import numpy as np
 import os
 from pdf2image import convert_from_path
 from flask import Flask ,send_file
-from flask_restful import Api, Resource ,request 
+from flask_restful import Api ,request 
+import pandas as pd
+
 
 app = Flask(__name__)
 api = Api(app)
@@ -14,7 +16,7 @@ try:
     upload_folder=os.path.join(path.replace("/file_folder",""),"PDF_Folder")
     os.makedirs(upload_folder, exist_ok=True)
     app.config['upload_folder'] = upload_folder
-
+    
     Images_folder=os.path.join(path.replace("/file_folder",""),"Images")
     os.makedirs(Images_folder, exist_ok=True)
     app.config['Images_folder'] = Images_folder
@@ -23,10 +25,6 @@ try:
     os.makedirs(ImagesAfterCrop_folder, exist_ok=True)
     app.config['ImagesAfterCrop_folder'] = ImagesAfterCrop_folder
     
-    okay_folder=os.path.join(path.replace("/file_folder",""),"okay")
-    os.makedirs(okay_folder, exist_ok=True)
-    app.config['okay_folder'] = okay_folder
-
 except Exception as e:
     app.logger.info('An error occurred while creating temp folder')
     app.logger.error('Exception occurred : {}'.format(e))
@@ -45,21 +43,22 @@ def crop():
         app.logger.info(e)
 
 
-@app.route('/cancel/<img_name>',methods = ['POST'])
-def dele(img_name):
+@app.route('/cancel',methods = ['POST'])
+def dele():
     try:
-        os.unlink(os.path.join(app.config['ImagesAfterCrop_folder'],f"{img_name}.jpg"))
+        imgArr = (request.get_json())['imgArr']
+        for img in imgArr:
+            os.unlink(os.path.join(app.config['ImagesAfterCrop_folder'],f"{img}.jpg"))
         return {"data":"deleted"}
     except Exception as e:
        return {"message":"error occur"} , 400
-        # app.logger.info("error occur")
 
 
-@app.route('/preview/<img_name>',methods = ['GET'])
+@app.route('/<img_name>',methods = ['GET'])
 def preview(img_name):
     if request.method == 'GET':
         try:
-            filename=f"../frist/ImagesAfterCrop/{img_name}"
+            filename=f"./ImagesAfterCrop/{img_name}"
             return send_file(filename,mimetype='image/jpg')
         except Exception as e:
             app.logger.info(e)
@@ -67,6 +66,9 @@ def preview(img_name):
 
 
 def makeImages(folderPath,pdf_name):
+
+    answers=getAnwers()
+
     print("Please Wait while the file is being loaded." , pdf_name)
     pdf_name=pdf_name.split('.')[0]
     file = convert_from_path(folderPath)
@@ -164,7 +166,6 @@ def makeImages(folderPath,pdf_name):
             # cv2.imshow("",inputCopy)
             image_RGB1 = np.array(inputCopy)
             image1 = Image.fromarray(image_RGB1.astype("uint8")).convert("RGB")
-            image1 = image1.save(os.path.join(app.config['okay_folder'],f"{a}_{i}.jpg"))
             cv2.waitKey(0)
 
         # Sort the list based on ascending Y values:
@@ -185,16 +186,36 @@ def makeImages(folderPath,pdf_name):
             # Crop the ROI:
             currentCrop = inputImage[y : y + cropHeight, x : x + cropWidth]
 
+            #small arr
+
             # cv2.imwrite('./ImagesAfterCrop', currentCrop)
             image_RGB = np.array(currentCrop)
             image = Image.fromarray(image_RGB.astype("uint8")).convert("RGB")
             id = int(i) + ((int(a.split('.')[0])-1)*4)
             image = image.save(os.path.join(app.config['ImagesAfterCrop_folder'],f"{pdf_name}-{id}.jpg"))
-            imagesPath.append(f"http://127.0.0.1:5000/preview/{pdf_name}-{id}.jpg")
+   
+
+            imgObj={
+                'src':(f"http://127.0.0.1:5000/{pdf_name}-{id}.jpg"),
+                'answer':(int(answers[id]))
+            }
+
+            imagesPath.append(imgObj)
             cv2.waitKey(0)
             # Set the next starting vertical coordinate:
             pastY = sectionHeight
     return imagesPath
+
+
+def getAnwers():
+    try:
+        df = pd.read_excel('./answers.xlsx',sheet_name='Sheet1')
+        df = df['answer'].to_numpy()
+        return df
+    except Exception as e:
+       return {"message":"error occur"} , 400
+    
+    
 
 if __name__ == "__main__":
     app.run(debug=True)
