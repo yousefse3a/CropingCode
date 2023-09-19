@@ -18,10 +18,13 @@ try:
     app.config['upload_folder'] = upload_folder
     
     Images_folder=os.path.join(path.replace("/file_folder",""),"Images")
+    print(Images_folder)
     os.makedirs(Images_folder, exist_ok=True)
     app.config['Images_folder'] = Images_folder
 
-    ImagesAfterCrop_folder=os.path.join(path.replace("/file_folder",""),"ImagesAfterCrop")
+
+    ImagesAfterCrop_folder=os.path.join(path.replace("/file_folder",""),"storage/app/public")
+    print(ImagesAfterCrop_folder)
     os.makedirs(ImagesAfterCrop_folder, exist_ok=True)
     app.config['ImagesAfterCrop_folder'] = ImagesAfterCrop_folder
     
@@ -33,12 +36,26 @@ except Exception as e:
 @app.route('/croping',methods = ['POST'])
 def crop():
     try:
-        pdf_file = request.files['file']
-        pdf_name = pdf_file.filename
-        save_path = os.path.join(app.config.get('upload_folder'),pdf_name)
-        pdf_file.save(save_path)
-        imges=makeImages(save_path,pdf_name)
-        return {"data":imges}
+        pdf_file = request.files['QuestionsFile']
+        question_name = pdf_file.filename
+        question_path = os.path.join(app.config.get('upload_folder'),question_name)
+        pdf_file.save(question_path)
+
+        answer_file = request.files['AnswersCSV']
+        answer_name = answer_file.filename
+        answer_path = os.path.join(app.config.get('upload_folder'),answer_name)
+        answer_file.save(answer_path)
+
+        restName=request.form['year']+'-'+request.form['semester']+'-'+request.form['type']+'-'+request.form['subject']+'_'+request.form['leason_id']
+        print(restName)
+        imges=makeImages(question_path,question_name,restName,answer_name,answer_path)
+
+        return {"year": request.form['year'],
+                "semester": request.form['semester'],
+                "type": request.form['type'],
+                "subject": request.form['subject'],
+                "leason_id": request.form['leason_id'],
+                "data":imges}
     except Exception as e:
         app.logger.info(e)
 
@@ -65,9 +82,9 @@ def preview(img_name):
 
 
 
-def makeImages(folderPath,pdf_name):
+def makeImages(folderPath,pdf_name,restName,answer_name,answer_path):
 
-    answers=getAnwers()
+    answers=getAnwers(answer_name,answer_path)
 
     print("Please Wait while the file is being loaded." , pdf_name)
     pdf_name=pdf_name.split('.')[0]
@@ -196,7 +213,7 @@ def makeImages(folderPath,pdf_name):
    
 
             imgObj={
-                'src':(f"http://127.0.0.1:5000/{pdf_name}-{id}.jpg"),
+                'src':(f"http://127.0.0.1:5000/question_{restName}_{id}.jpg"),
                 'answer':(int(answers[id]))
             }
 
@@ -207,9 +224,9 @@ def makeImages(folderPath,pdf_name):
     return imagesPath
 
 
-def getAnwers():
+def getAnwers(answer_name,answer_path):
     try:
-        df = pd.read_excel('./answers.xlsx',sheet_name='Sheet1')
+        df = pd.read_excel(answer_path,sheet_name='Sheet1')
         df = df['answer'].to_numpy()
         return df
     except Exception as e:
